@@ -122,6 +122,9 @@ pub trait MasterPty: Downcast + Send {
     fn get_termios(&self) -> Option<nix::sys::termios::Termios> {
         None
     }
+
+    #[cfg(windows)]
+    fn as_raw_handle(&self)-> Option<std::os::windows::io::RawHandle>;
 }
 impl_downcast!(MasterPty);
 

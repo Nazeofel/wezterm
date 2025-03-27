@@ -2,7 +2,8 @@ use crate::cmdbuilder::CommandBuilder;
 use crate::win::psuedocon::PsuedoCon;
 use crate::{Child, MasterPty, PtyPair, PtySize, PtySystem, SlavePty};
 use anyhow::Error;
-use filedescriptor::{FileDescriptor, Pipe};
+use filedescriptor::{AsRawFileDescriptor, FileDescriptor, OwnedHandle, Pipe, RawFileDescriptor};
+use std::os::windows::io::AsRawHandle;
 use std::sync::{Arc, Mutex};
 use winapi::um::wincon::COORD;
 
@@ -14,19 +15,20 @@ impl PtySystem for ConPtySystem {
         let stdin = Pipe::new()?;
         let stdout = Pipe::new()?;
 
+        
         let con = PsuedoCon::new(
             COORD {
                 X: size.cols as i16,
                 Y: size.rows as i16,
             },
-            stdin.read,
+            stdin.read.try_clone().unwrap(),
             stdout.write,
         )?;
 
         let master = ConPtyMasterPty {
             inner: Arc::new(Mutex::new(Inner {
                 con,
-                readable: stdout.read,
+                readable: stdin.read.try_clone().unwrap(),
                 writable: Some(stdin.write),
                 size,
             })),
@@ -105,6 +107,11 @@ impl MasterPty for ConPtyMasterPty {
                 .take()
                 .ok_or_else(|| anyhow::anyhow!("writer already taken"))?,
         ))
+    }
+
+    fn as_raw_handle(&self) -> Option<std::os::windows::io::RawHandle> {
+        let proc = self.inner.lock().unwrap();
+        Some(proc.readable.as_file().unwrap().as_raw_handle())
     }
 }
 
